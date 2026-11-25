@@ -3,6 +3,11 @@ import { Briefcase, Check, ClipboardCheck, Plus, Trash2, Users } from 'lucide-re
 import { INITIAL_CHECKLIST } from '../../data/mockData';
 import type { ChecklistCategory, ChecklistItem } from '../../types/travel';
 import { loadFromStorage, saveToStorage, STORAGE_KEYS } from '../../utils/storage';
+import {
+  INPUT_LIMITS,
+  sanitizeSingleLine,
+  sanitizeStoredChecklist,
+} from '../../utils/validation';
 import { ProgressBar } from './ProgressBar';
 
 type ChecklistFilter = '전체' | ChecklistCategory;
@@ -13,11 +18,16 @@ interface ChecklistPageProps {
 
 export function ChecklistPage({ resetKey }: ChecklistPageProps) {
   const [items, setItems] = useState<ChecklistItem[]>(() =>
-    loadFromStorage<ChecklistItem[]>(STORAGE_KEYS.CHECKLIST, INITIAL_CHECKLIST),
+    loadFromStorage<ChecklistItem[]>(
+      STORAGE_KEYS.CHECKLIST,
+      INITIAL_CHECKLIST,
+      sanitizeStoredChecklist,
+    ),
   );
   const [activeFilter, setActiveFilter] = useState<ChecklistFilter>('전체');
   const [newCategory, setNewCategory] = useState<ChecklistCategory>('준비물');
   const [newText, setNewText] = useState<string>('');
+  const [inputError, setInputError] = useState<string>('');
   const prevResetKeyRef = useRef<number>(resetKey);
 
   useEffect(() => {
@@ -27,6 +37,7 @@ export function ChecklistPage({ resetKey }: ChecklistPageProps) {
       setActiveFilter('전체');
       setNewCategory('준비물');
       setNewText('');
+      setInputError('');
     }
   }, [resetKey]);
 
@@ -62,20 +73,39 @@ export function ChecklistPage({ resetKey }: ChecklistPageProps) {
 
   const handleAddItem = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const trimmed = newText.trim();
-    if (trimmed.length === 0) {
+    const cleaned = sanitizeSingleLine(newText, INPUT_LIMITS.CHECKLIST_TEXT_MAX);
+    if (cleaned.length === 0) {
+      setInputError('추가할 항목 내용을 입력해 주세요.');
+      return;
+    }
+
+    if (items.length >= INPUT_LIMITS.CHECKLIST_MAX_ITEMS) {
+      setInputError(
+        `체크리스트는 최대 ${INPUT_LIMITS.CHECKLIST_MAX_ITEMS}개까지 등록할 수 있습니다.`,
+      );
+      return;
+    }
+
+    const isDuplicate = items.some(
+      (item) =>
+        item.category === newCategory &&
+        item.text.toLocaleLowerCase() === cleaned.toLocaleLowerCase(),
+    );
+    if (isDuplicate) {
+      setInputError(`'${newCategory}'에 이미 동일한 항목이 등록되어 있습니다.`);
       return;
     }
 
     const createdItem: ChecklistItem = {
       id: `chk-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      text: trimmed,
+      text: cleaned,
       category: newCategory,
       completed: false,
     };
 
     persistItems([createdItem, ...items]);
     setNewText('');
+    setInputError('');
 
     if (activeFilter !== '전체' && activeFilter !== newCategory) {
       setActiveFilter('전체');
@@ -155,10 +185,14 @@ export function ChecklistPage({ resetKey }: ChecklistPageProps) {
           <input
             type="text"
             value={newText}
-            onChange={(event) => setNewText(event.target.value)}
+            aria-invalid={Boolean(inputError)}
+            onChange={(event) => {
+              setNewText(event.target.value.slice(0, INPUT_LIMITS.CHECKLIST_TEXT_MAX));
+              if (inputError) setInputError('');
+            }}
             placeholder="새 준비물 또는 인원 항목 추가..."
             aria-label="새 준비물 또는 인원 항목 입력"
-            maxLength={80}
+            maxLength={INPUT_LIMITS.CHECKLIST_TEXT_MAX}
             className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-app)] px-3.5 text-sm text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-soft)]"
           />
           <button
@@ -170,6 +204,11 @@ export function ChecklistPage({ resetKey }: ChecklistPageProps) {
             추가
           </button>
         </div>
+        {inputError && (
+          <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)]">
+            {inputError}
+          </p>
+        )}
       </form>
 
       {/* Checklist Item List */}

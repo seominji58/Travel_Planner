@@ -9,6 +9,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import type { EmergencyContactItem } from '../../types/travel';
+import { sanitizeTelHref } from '../../utils/validation';
 
 async function copyTextSafely(text: string): Promise<boolean> {
   try {
@@ -90,7 +91,7 @@ export function EmergencyContacts({
 
       <div className="space-y-2.5">
         {contacts.map((contact) => {
-          const sanitizedPhone = contact.phone.replace(/[^+\d]/g, '');
+          const telHref = sanitizeTelHref(contact.phone);
           const isCopied = copiedId === contact.id;
 
           return (
@@ -168,7 +169,7 @@ export function EmergencyContacts({
                 </button>
 
                 <a
-                  href={`tel:${sanitizedPhone}`}
+                  href={telHref}
                   aria-label={`${contact.label} 전화 걸기 (${contact.phone})`}
                   className={`w-11 h-11 rounded-full inline-flex items-center justify-center text-white shadow-xs transition-colors active:scale-95 ${
                     contact.isUrgent

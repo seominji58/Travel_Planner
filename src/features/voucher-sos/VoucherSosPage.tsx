@@ -10,6 +10,7 @@ import {
   loadFromStorage,
   saveToStorage,
 } from '../../utils/storage';
+import { sanitizeStoredVouchers } from '../../utils/validation';
 import { EmergencyContacts } from './EmergencyContacts';
 import { QrVoucherModal } from './QrVoucherModal';
 import { TaxiHotelCard } from './TaxiHotelCard';
@@ -17,7 +18,11 @@ import { VoucherCardList } from './VoucherCardList';
 
 export function VoucherSosPage({ resetKey }: { resetKey: number }) {
   const [vouchers, setVouchers] = useState<VoucherItem[]>(() =>
-    loadFromStorage<VoucherItem[]>(STORAGE_KEYS.VOUCHERS, INITIAL_VOUCHERS),
+    loadFromStorage<VoucherItem[]>(
+      STORAGE_KEYS.VOUCHERS,
+      INITIAL_VOUCHERS,
+      sanitizeStoredVouchers,
+    ),
   );
   const [selectedVoucher, setSelectedVoucher] = useState<VoucherItem | null>(
     null,
@@ -27,6 +32,7 @@ export function VoucherSosPage({ resetKey }: { resetKey: number }) {
     const syncedVouchers = loadFromStorage<VoucherItem[]>(
       STORAGE_KEYS.VOUCHERS,
       INITIAL_VOUCHERS,
+      sanitizeStoredVouchers,
     );
     setVouchers(syncedVouchers);
     setSelectedVoucher(null);

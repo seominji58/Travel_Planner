@@ -11,6 +11,10 @@ import {
   loadFromStorage,
   saveToStorage,
 } from '../../utils/storage';
+import {
+  INPUT_LIMITS,
+  sanitizeStoredItinerary,
+} from '../../utils/validation';
 import { DayRouteMap } from './DayRouteMap';
 import { ScheduleCard } from './ScheduleCard';
 import { ScheduleFormModal } from './ScheduleFormModal';
@@ -44,13 +48,18 @@ function hydrateMissingLocations(saved: ScheduleItem[]): ScheduleItem[] {
 export function ItineraryPage({ resetKey }: ItineraryPageProps) {
   const [items, setItems] = useState<ScheduleItem[]>(() =>
     hydrateMissingLocations(
-      loadFromStorage<ScheduleItem[]>(STORAGE_KEYS.ITINERARY, INITIAL_ITINERARY),
+      loadFromStorage<ScheduleItem[]>(
+        STORAGE_KEYS.ITINERARY,
+        INITIAL_ITINERARY,
+        sanitizeStoredItinerary,
+      ),
     ),
   );
   const [selectedDay, setSelectedDay] = useState<DayNumber>(1);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
+  const [limitNotice, setLimitNotice] = useState('');
 
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
   const prevResetKeyRef = useRef(resetKey);
@@ -97,6 +106,13 @@ export function ItineraryPage({ resetKey }: ItineraryPageProps) {
   };
 
   const handleOpenAddModal = () => {
+    if (items.length >= INPUT_LIMITS.SCHEDULE_MAX_ITEMS) {
+      setLimitNotice(
+        `일정은 최대 ${INPUT_LIMITS.SCHEDULE_MAX_ITEMS}개까지 등록할 수 있습니다.`,
+      );
+      return;
+    }
+    setLimitNotice('');
     setEditingItem(null);
     setIsModalOpen(true);
   };
@@ -192,6 +208,14 @@ export function ItineraryPage({ resetKey }: ItineraryPageProps) {
       </div>
 
       {/* Day Summary Bar */}
+      {limitNotice && (
+        <p
+          role="alert"
+          className="rounded-xl border border-red-200 bg-[var(--color-danger-soft)] px-3.5 py-2 text-[12px] font-semibold text-red-700"
+        >
+          {limitNotice}
+        </p>
+      )}
       <div className="flex items-center justify-between rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] px-3.5 py-2.5 text-[12.5px]">
         <div className="flex items-center gap-2">
           <span className="font-bold text-[var(--color-text-main)]">
