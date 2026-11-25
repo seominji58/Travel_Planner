@@ -12,6 +12,11 @@ import type {
   ScheduleItem,
   ScheduleStatus,
 } from '../../types/travel';
+import {
+  buildSafeGoogleMapsUrl,
+  isValidLatitude,
+  isValidLongitude,
+} from '../../utils/validation';
 
 interface ScheduleCardProps {
   item: ScheduleItem;
@@ -54,17 +59,8 @@ export function ScheduleCard({
   const categoryColors = CATEGORY_STYLE[item.category];
   const isInProgress = item.status === '진행 중';
   const isCompleted = item.status === '완료';
-  const hasCoords =
-    typeof item.lat === 'number' &&
-    typeof item.lng === 'number' &&
-    Number.isFinite(item.lat) &&
-    Number.isFinite(item.lng);
-
-  const googleMapsUrl = hasCoords
-    ? `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`
-    : item.address
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.address)}`
-      : null;
+  const hasCoords = isValidLatitude(item.lat) && isValidLongitude(item.lng);
+  const googleMapsUrl = buildSafeGoogleMapsUrl(item.lat, item.lng, item.address);
 
   return (
     <article

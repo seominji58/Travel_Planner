@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import type { HotelTaxiCardData } from '../../types/travel';
+import { buildSafeGoogleMapsUrl, sanitizeTelHref } from '../../utils/validation';
 
 async function copyTextSafely(text: string): Promise<boolean> {
   try {
@@ -37,13 +38,31 @@ async function copyTextSafely(text: string): Promise<boolean> {
   }
 }
 
+function createHotelPopupNode(nameJa: string, nameKo: string): HTMLDivElement {
+  const wrap = document.createElement('div');
+  wrap.style.fontSize = '12px';
+  wrap.style.fontWeight = '700';
+  wrap.style.color = '#0F172A';
+  wrap.textContent = nameJa;
+
+  const sub = document.createElement('div');
+  sub.style.fontSize = '11px';
+  sub.style.fontWeight = '500';
+  sub.style.color = '#475569';
+  sub.style.marginTop = '2px';
+  sub.textContent = nameKo;
+  wrap.appendChild(sub);
+
+  return wrap;
+}
+
 export function TaxiHotelCard({ hotel }: { hotel: HotelTaxiCardData }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const miniMapRef = useRef<HTMLDivElement | null>(null);
 
-  const sanitizedPhone = hotel.phone.replace(/[^+\d]/g, '');
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${hotel.lat},${hotel.lng}`;
+  const telHref = sanitizeTelHref(hotel.phone);
+  const googleMapsUrl = buildSafeGoogleMapsUrl(hotel.lat, hotel.lng, hotel.nameJa);
 
   useEffect(() => {
     if (!miniMapRef.current) return undefined;
@@ -60,18 +79,31 @@ export function TaxiHotelCard({ hotel }: { hotel: HotelTaxiCardData }) {
       attribution: '&copy; OSM',
     }).addTo(map);
 
+    const pinNode = document.createElement('div');
+    pinNode.style.width = '30px';
+    pinNode.style.height = '30px';
+    pinNode.style.borderRadius = '9999px';
+    pinNode.style.background = '#0D9488';
+    pinNode.style.color = '#ffffff';
+    pinNode.style.fontWeight = '900';
+    pinNode.style.fontSize = '13px';
+    pinNode.style.display = 'flex';
+    pinNode.style.alignItems = 'center';
+    pinNode.style.justifyContent = 'center';
+    pinNode.style.border = '3px solid #ffffff';
+    pinNode.style.boxShadow = '0 4px 12px rgba(15,23,42,0.35)';
+    pinNode.textContent = 'H';
+
     const hotelPin = L.divIcon({
       className: 'tp-map-pin',
-      html: '<div style="width:30px;height:30px;border-radius:9999px;background:#0D9488;color:#fff;font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center;border:3px solid #ffffff;box-shadow:0 4px 12px rgba(15,23,42,0.35);">H</div>',
+      html: pinNode,
       iconSize: [30, 30],
       iconAnchor: [15, 15],
     });
 
     L.marker([hotel.lat, hotel.lng], { icon: hotelPin })
       .addTo(map)
-      .bindPopup(
-        `<div style="font-size:12px;font-weight:700;color:#0F172A;">${hotel.nameJa}<div style="font-size:11px;font-weight:500;color:#475569;margin-top:2px;">${hotel.nameKo}</div></div>`,
-      );
+      .bindPopup(createHotelPopupNode(hotel.nameJa, hotel.nameKo));
 
     return () => {
       map.remove();
@@ -200,20 +232,22 @@ export function TaxiHotelCard({ hotel }: { hotel: HotelTaxiCardData }) {
               )}
             </button>
 
-            <a
-              href={googleMapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="구글 지도에서 호텔 위치 보기"
-              className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] px-3 text-xs font-bold text-white transition-colors"
-            >
-              <span>구글 지도 길찾기</span>
-              <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-            </a>
+            {googleMapsUrl && (
+              <a
+                href={googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="구글 지도에서 호텔 위치 보기"
+                className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] px-3 text-xs font-bold text-white transition-colors"
+              >
+                <span>구글 지도 길찾기</span>
+                <ExternalLink className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              </a>
+            )}
           </div>
 
           <a
-            href={`tel:${sanitizedPhone}`}
+            href={telHref}
             aria-label={`호텔 전화 연결 (${hotel.phone})`}
             className="mt-2 min-h-[42px] w-full inline-flex items-center justify-center gap-1.5 rounded-xl bg-[var(--color-primary-soft)] px-3 text-xs font-bold text-[var(--color-primary)] transition-colors hover:bg-[#DCEAFE] active:bg-[#CFE3FD]"
           >

@@ -5,23 +5,51 @@ export const STORAGE_KEYS = {
   VOUCHERS: 'tp_vouchers_v1',
 } as const;
 
-export function loadFromStorage<T>(key: string, fallback: T): T {
+const MAX_STORAGE_PAYLOAD_BYTES = 100_000;
+
+/**
+ * Safe JSON parser that strips prototype-pollution keys (`__proto__`, `constructor`, `prototype`).
+ */
+function safeJsonParse(raw: string): unknown {
+  return JSON.parse(raw, (key, value: unknown) => {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      return undefined;
+    }
+    return value;
+  });
+}
+
+export function loadFromStorage<T>(
+  key: string,
+  fallback: T,
+  sanitizer?: (parsed: unknown, fallback: T) => T,
+): T {
   try {
     const raw = window.localStorage.getItem(key);
-    if (raw === null) {
+    if (raw === null || raw.length > MAX_STORAGE_PAYLOAD_BYTES) {
       return fallback;
     }
-    return JSON.parse(raw) as T;
+    const parsed = safeJsonParse(raw);
+    if (sanitizer) {
+      return sanitizer(parsed, fallback);
+    }
+    return parsed as T;
   } catch {
     return fallback;
   }
 }
 
-export function saveToStorage<T>(key: string, value: T): void {
+export function saveToStorage<T>(key: string, value: T): boolean {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    const serialized = JSON.stringify(value);
+    if (serialized.length > MAX_STORAGE_PAYLOAD_BYTES) {
+      return false;
+    }
+    window.localStorage.setItem(key, serialized);
+    return true;
   } catch {
     // Ignore storage quota errors in private browsing modes
+    return false;
   }
 }
 

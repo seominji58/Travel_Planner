@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Megaphone, X } from 'lucide-react';
 import { NOTICE_TEMPLATES } from '../../data/mockData';
+import { INPUT_LIMITS, sanitizeMultiLine } from '../../utils/validation';
 
-const MAX_NOTICE_LENGTH = 120;
+const MAX_NOTICE_LENGTH = INPUT_LIMITS.NOTICE_MAX_LENGTH;
 
 interface NoticeEditModalProps {
   isOpen: boolean;
@@ -18,10 +19,12 @@ export function NoticeEditModal({
   onSave,
 }: NoticeEditModalProps) {
   const [draft, setDraft] = useState<string>(initialContent);
+  const [validationError, setValidationError] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
       setDraft(initialContent.slice(0, MAX_NOTICE_LENGTH));
+      setValidationError('');
     }
   }, [isOpen, initialContent]);
 
@@ -44,14 +47,16 @@ export function NoticeEditModal({
     return null;
   }
 
-  const trimmedDraft = draft.trim();
+  const trimmedDraft = sanitizeMultiLine(draft, MAX_NOTICE_LENGTH);
   const isSaveDisabled = trimmedDraft.length === 0;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSaveDisabled) {
+      setValidationError('공지 내용을 1자 이상 입력해 주세요.');
       return;
     }
+    setValidationError('');
     onSave(trimmedDraft);
   };
 
@@ -164,12 +169,21 @@ export function NoticeEditModal({
           <textarea
             id="notice-content-input"
             value={draft}
-            onChange={(event) => setDraft(event.target.value.slice(0, MAX_NOTICE_LENGTH))}
+            aria-invalid={Boolean(validationError)}
+            onChange={(event) => {
+              setDraft(event.target.value.slice(0, MAX_NOTICE_LENGTH));
+              if (validationError) setValidationError('');
+            }}
             maxLength={MAX_NOTICE_LENGTH}
             rows={4}
             placeholder="여행객에게 전달할 긴급 공지나 집합 시간을 입력하세요."
             className="mt-1.5 w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-app)] p-3 text-sm leading-relaxed text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-soft)]"
           />
+          {validationError && (
+            <p role="alert" className="mt-1 text-xs font-medium text-[var(--color-danger)]">
+              {validationError}
+            </p>
+          )}
 
           <div className="mt-5 grid grid-cols-2 gap-2.5">
             <button

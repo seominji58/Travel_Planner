@@ -12,6 +12,11 @@ import {
 } from 'lucide-react';
 import { DAY_INFO } from '../../data/mockData';
 import type { DayNumber, ScheduleItem, ScheduleStatus } from '../../types/travel';
+import {
+  buildSafeGoogleMapsUrl,
+  isValidLatitude,
+  isValidLongitude,
+} from '../../utils/validation';
 
 interface DayRouteMapProps {
   day: DayNumber;
@@ -40,20 +45,84 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function escapeHtml(raw: string): string {
-  return raw
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+/**
+ * Builds Leaflet popup content strictly with DOM nodes + textContent (zero HTML string injection).
+ */
+function createSafePopupElement(
+  item: ScheduleItem & { lat: number; lng: number },
+  stepNumber: number,
+  accentColor: string,
+): HTMLDivElement {
+  const root = document.createElement('div');
+  root.style.minWidth = '170px';
+  root.style.maxWidth = '220px';
 
-function buildGoogleMapsUrl(item: ScheduleItem): string {
-  if (typeof item.lat === 'number' && typeof item.lng === 'number') {
-    return `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`;
+  const metaRow = document.createElement('div');
+  metaRow.style.display = 'flex';
+  metaRow.style.alignItems = 'center';
+  metaRow.style.gap = '6px';
+  metaRow.style.marginBottom = '2px';
+
+  const stepSpan = document.createElement('span');
+  stepSpan.style.fontSize = '11px';
+  stepSpan.style.fontWeight = '800';
+  stepSpan.style.color = accentColor;
+  stepSpan.textContent = `${stepNumber}번 · ${item.time}`;
+  metaRow.appendChild(stepSpan);
+
+  const catSpan = document.createElement('span');
+  catSpan.style.fontSize = '10px';
+  catSpan.style.fontWeight = '700';
+  catSpan.style.padding = '1px 6px';
+  catSpan.style.borderRadius = '9999px';
+  catSpan.style.background = '#F1F5F9';
+  catSpan.style.color = '#475569';
+  catSpan.textContent = item.category;
+  metaRow.appendChild(catSpan);
+
+  root.appendChild(metaRow);
+
+  const titleEl = document.createElement('div');
+  titleEl.style.fontSize = '13px';
+  titleEl.style.fontWeight = '800';
+  titleEl.style.color = '#0F172A';
+  titleEl.textContent = item.title;
+  root.appendChild(titleEl);
+
+  if (item.address) {
+    const addrEl = document.createElement('div');
+    addrEl.style.fontSize = '11px';
+    addrEl.style.color = '#475569';
+    addrEl.style.marginTop = '3px';
+    addrEl.textContent = item.address;
+    root.appendChild(addrEl);
   }
-  const query = encodeURIComponent(item.address || item.title);
-  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+
+  const gpsEl = document.createElement('div');
+  gpsEl.style.fontSize = '10px';
+  gpsEl.style.fontFamily = 'monospace';
+  gpsEl.style.color = '#64748B';
+  gpsEl.style.marginTop = '4px';
+  gpsEl.textContent = `GPS ${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}`;
+  root.appendChild(gpsEl);
+
+  const safeUrl = buildSafeGoogleMapsUrl(item.lat, item.lng, item.address ?? item.title);
+  if (safeUrl) {
+    const linkEl = document.createElement('a');
+    linkEl.href = safeUrl;
+    linkEl.target = '_blank';
+    linkEl.rel = 'noopener noreferrer';
+    linkEl.style.display = 'inline-block';
+    linkEl.style.marginTop = '6px';
+    linkEl.style.fontSize = '11px';
+    linkEl.style.fontWeight = '700';
+    linkEl.style.color = '#1D6FE2';
+    linkEl.style.textDecoration = 'none';
+    linkEl.textContent = '구글 지도로 길찾기 →';
+    root.appendChild(linkEl);
+  }
+
+  return root;
 }
 
 export function DayRouteMap({
@@ -74,10 +143,7 @@ export function DayRouteMap({
     () =>
       items.filter(
         (item): item is ScheduleItem & { lat: number; lng: number } =>
-          typeof item.lat === 'number' &&
-          typeof item.lng === 'number' &&
-          Number.isFinite(item.lat) &&
-          Number.isFinite(item.lng),
+          isValidLatitude(item.lat) && isValidLongitude(item.lng),
       ),
     [items],
   );
@@ -106,13 +172,16 @@ export function DayRouteMap({
     );
   }, [focusedItemId, geoItems]);
 
+  const activeMapUrl = activeItem
+    ? buildSafeGoogleMapsUrl(activeItem.lat, activeItem.lng, activeItem.address ?? activeItem.title)
+    : null;
+
   useEffect(() => {
     if (!copiedCoord) return;
     const timer = window.setTimeout(() => setCopiedCoord(false), 1800);
     return () => window.clearTimeout(timer);
   }, [copiedCoord]);
 
-  // Initialize Leaflet map when expanded
   useEffect(() => {
     if (!isExpanded || !mapContainerRef.current) {
       return undefined;
@@ -142,7 +211,6 @@ export function DayRouteMap({
     };
   }, [isExpanded]);
 
-  // Render markers & route polyline when geoItems or expanded state changes
   useEffect(() => {
     const map = mapInstanceRef.current;
     const group = layerGroupRef.current;
@@ -164,38 +232,41 @@ export function DayRouteMap({
 
       const isFocused = item.id === focusedItemId;
       const bg = STATUS_PIN_COLOR[item.status];
-      const ring =
+      const pinEl = document.createElement('div');
+      pinEl.style.width = '28px';
+      pinEl.style.height = '28px';
+      pinEl.style.borderRadius = '9999px';
+      pinEl.style.background = bg;
+      pinEl.style.color = '#ffffff';
+      pinEl.style.fontWeight = '800';
+      pinEl.style.fontSize = '12px';
+      pinEl.style.display = 'flex';
+      pinEl.style.alignItems = 'center';
+      pinEl.style.justifyContent = 'center';
+      pinEl.style.border = '2.5px solid #ffffff';
+      pinEl.style.boxShadow =
         isFocused || item.status === '진행 중'
-          ? 'box-shadow:0 0 0 4px rgba(29,111,226,0.28),0 4px 10px rgba(15,23,42,0.28);transform:scale(1.12);'
-          : 'box-shadow:0 3px 8px rgba(15,23,42,0.24);';
+          ? '0 0 0 4px rgba(29,111,226,0.28),0 4px 10px rgba(15,23,42,0.28)'
+          : '0 3px 8px rgba(15,23,42,0.24)';
+      if (isFocused || item.status === '진행 중') {
+        pinEl.style.transform = 'scale(1.12)';
+      }
+      pinEl.textContent = String(idx + 1);
 
       const icon = L.divIcon({
         className: 'tp-map-pin',
-        html: `<div style="width:28px;height:28px;border-radius:9999px;background:${bg};color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;border:2.5px solid #ffffff;${ring}">${idx + 1}</div>`,
+        html: pinEl,
         iconSize: [28, 28],
         iconAnchor: [14, 14],
         popupAnchor: [0, -14],
       });
 
       const marker = L.marker(point, { icon }).addTo(group);
-      const mapUrl = buildGoogleMapsUrl(item);
-      const addrHtml = item.address
-        ? `<div style="font-size:11px;color:#475569;margin-top:3px;">${escapeHtml(item.address)}</div>`
-        : '';
-
-      marker.bindPopup(
-        `<div style="min-width:170px;max-width:220px;">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-            <span style="font-size:11px;font-weight:800;color:${bg};">${idx + 1}번 · ${escapeHtml(item.time)}</span>
-            <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:9999px;background:#F1F5F9;color:#475569;">${escapeHtml(item.category)}</span>
-          </div>
-          <div style="font-size:13px;font-weight:800;color:#0F172A;">${escapeHtml(item.title)}</div>
-          ${addrHtml}
-          <div style="font-size:10px;font-family:monospace;color:#64748B;margin-top:4px;">GPS ${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}</div>
-          <a href="${mapUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;font-size:11px;font-weight:700;color:#1D6FE2;text-decoration:none;">구글 지도로 길찾기 →</a>
-        </div>`,
-        { autoPanPaddingTopLeft: L.point(16, 20), autoPanPaddingBottomRight: L.point(16, 16) },
-      );
+      const popupNode = createSafePopupElement(item, idx + 1, bg);
+      marker.bindPopup(popupNode, {
+        autoPanPaddingTopLeft: L.point(16, 20),
+        autoPanPaddingBottomRight: L.point(16, 16),
+      });
 
       marker.on('click', () => {
         onSelectItem(item.id);
@@ -223,7 +294,6 @@ export function DayRouteMap({
     }
   }, [geoItems, isExpanded, focusedItemId, onSelectItem]);
 
-  // Smoothly focus selected marker when user clicks "지도 보기" on a card
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!isExpanded || !map || !focusedItemId) return;
@@ -327,7 +397,6 @@ export function DayRouteMap({
             )}
           </div>
 
-          {/* Focused Pin Address & Coordinates Bar */}
           {activeItem && (
             <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-app)] px-3.5 py-2.5">
               <div className="flex items-start justify-between gap-2">
@@ -375,15 +444,17 @@ export function DayRouteMap({
                     )}
                   </button>
 
-                  <a
-                    href={buildGoogleMapsUrl(activeItem)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 min-h-[32px] px-2.5 rounded-lg bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[11px] font-bold text-white transition-colors"
-                  >
-                    <span>길찾기</span>
-                    <ExternalLink className="w-3 h-3" aria-hidden="true" />
-                  </a>
+                  {activeMapUrl && (
+                    <a
+                      href={activeMapUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 min-h-[32px] px-2.5 rounded-lg bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[11px] font-bold text-white transition-colors"
+                    >
+                      <span>길찾기</span>
+                      <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

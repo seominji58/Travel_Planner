@@ -9,6 +9,13 @@ import type {
   ScheduleItem,
   ScheduleStatus,
 } from '../../types/travel';
+import {
+  INPUT_LIMITS,
+  isValidTimeString,
+  parseCoordinatePair,
+  sanitizeMultiLine,
+  sanitizeSingleLine,
+} from '../../utils/validation';
 
 interface ScheduleFormModalProps {
   isOpen: boolean;
@@ -48,6 +55,7 @@ export function ScheduleFormModal({
   const [lngStr, setLngStr] = useState('');
   const [memo, setMemo] = useState('');
   const [status, setStatus] = useState<ScheduleStatus>('예정');
+  const [timeError, setTimeError] = useState('');
   const [titleError, setTitleError] = useState('');
   const [coordError, setCoordError] = useState('');
 
@@ -75,6 +83,7 @@ export function ScheduleFormModal({
       setMemo('');
       setStatus('예정');
     }
+    setTimeError('');
     setTitleError('');
     setCoordError('');
   }, [isOpen, initialItem, day]);
@@ -109,48 +118,50 @@ export function ScheduleFormModal({
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) {
+    let hasError = false;
+
+    const trimmedTime = time.trim();
+    if (!isValidTimeString(trimmedTime)) {
+      setTimeError('올바른 시간 형식(HH:mm, 00:00~23:59)을 입력해 주세요.');
+      hasError = true;
+    } else {
+      setTimeError('');
+    }
+
+    const cleanTitle = sanitizeSingleLine(title, INPUT_LIMITS.SCHEDULE_TITLE_MAX);
+    if (!cleanTitle) {
       setTitleError('장소명을 입력해 주세요.');
+      hasError = true;
+    } else {
+      setTitleError('');
+    }
+
+    const coordResult = parseCoordinatePair(latStr, lngStr);
+    if (!coordResult.ok) {
+      setCoordError(coordResult.error);
+      hasError = true;
+    } else {
+      setCoordError('');
+    }
+
+    if (hasError || !coordResult.ok) {
       return;
     }
 
-    const trimmedLat = latStr.trim();
-    const trimmedLng = lngStr.trim();
-    let parsedLat: number | undefined;
-    let parsedLng: number | undefined;
-
-    if (trimmedLat || trimmedLng) {
-      const latNum = Number(trimmedLat);
-      const lngNum = Number(trimmedLng);
-      if (
-        !trimmedLat ||
-        !trimmedLng ||
-        !Number.isFinite(latNum) ||
-        !Number.isFinite(lngNum) ||
-        latNum < -90 ||
-        latNum > 90 ||
-        lngNum < -180 ||
-        lngNum > 180
-      ) {
-        setCoordError('위도(-90~90)와 경도(-180~180)를 모두 올바른 숫자로 입력해 주세요.');
-        return;
-      }
-      parsedLat = latNum;
-      parsedLng = lngNum;
-    }
+    const cleanAddress = sanitizeSingleLine(address, INPUT_LIMITS.SCHEDULE_ADDRESS_MAX);
+    const cleanMemo = sanitizeMultiLine(memo, INPUT_LIMITS.SCHEDULE_MEMO_MAX);
 
     onSave(
       {
         day: selectedDay,
-        time: time || '10:00',
-        title: trimmedTitle,
+        time: trimmedTime,
+        title: cleanTitle,
         category,
-        memo: memo.trim(),
+        memo: cleanMemo,
         status,
-        address: address.trim() || undefined,
-        lat: parsedLat,
-        lng: parsedLng,
+        address: cleanAddress || undefined,
+        lat: coordResult.lat,
+        lng: coordResult.lng,
       },
       initialItem?.id,
     );
@@ -194,7 +205,7 @@ export function ScheduleFormModal({
 
         {/* Form */}
         <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-3.5">
-          {/* Day Selector (Allows moving schedule across days) */}
+          {/* Day Selector */}
           <div>
             <span className="block text-[12.5px] font-semibold text-[var(--color-text-main)] mb-1.5">
               여행 일차
@@ -254,9 +265,22 @@ export function ScheduleFormModal({
               type="time"
               required
               value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="w-full min-h-[44px] rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-app)] px-3.5 text-[14px] font-medium text-[var(--color-text-main)] tabular-nums focus:border-[var(--color-primary)] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/15"
+              onChange={(e) => {
+                setTime(e.target.value);
+                if (timeError) setTimeError('');
+              }}
+              aria-invalid={Boolean(timeError)}
+              className={`w-full min-h-[44px] rounded-xl border px-3.5 text-[14px] font-medium text-[var(--color-text-main)] tabular-nums focus:bg-white focus:outline-none focus:ring-2 ${
+                timeError
+                  ? 'border-[var(--color-danger)] bg-[var(--color-danger-soft)]/40 focus:border-[var(--color-danger)] focus:ring-red-500/15'
+                  : 'border-[var(--color-border)] bg-[var(--color-bg-app)] focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)]/15'
+              }`}
             />
+            {timeError && (
+              <p role="alert" className="mt-1 text-[11.5px] font-medium text-[var(--color-danger)]">
+                {timeError}
+              </p>
+            )}
           </div>
 
           {/* Category */}
@@ -298,19 +322,26 @@ export function ScheduleFormModal({
 
           {/* Title */}
           <div>
-            <label
-              htmlFor="schedule-title"
-              className="block text-[12.5px] font-semibold text-[var(--color-text-main)] mb-1.5"
-            >
-              장소명 <span className="text-[var(--color-danger)]">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label
+                htmlFor="schedule-title"
+                className="text-[12.5px] font-semibold text-[var(--color-text-main)]"
+              >
+                장소명 <span className="text-[var(--color-danger)]">*</span>
+              </label>
+              <span className="text-[11px] font-medium text-[var(--color-text-muted)] tabular-nums">
+                {title.length} / {INPUT_LIMITS.SCHEDULE_TITLE_MAX}
+              </span>
+            </div>
             <input
               id="schedule-title"
               type="text"
               required
+              maxLength={INPUT_LIMITS.SCHEDULE_TITLE_MAX}
               value={title}
+              aria-invalid={Boolean(titleError)}
               onChange={(e) => {
-                setTitle(e.target.value);
+                setTitle(e.target.value.slice(0, INPUT_LIMITS.SCHEDULE_TITLE_MAX));
                 if (titleError) setTitleError('');
               }}
               placeholder="예: 시부야 스카이 전망대 입장"
@@ -341,8 +372,11 @@ export function ScheduleFormModal({
             <input
               id="schedule-address"
               type="text"
+              maxLength={INPUT_LIMITS.SCHEDULE_ADDRESS_MAX}
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
+              onChange={(e) =>
+                setAddress(e.target.value.slice(0, INPUT_LIMITS.SCHEDULE_ADDRESS_MAX))
+              }
               placeholder="예: 도쿄도 시부야구 시부야 2-24-12"
               className="w-full min-h-[44px] rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-app)] px-3.5 text-[13.5px] text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/15"
             />
@@ -357,8 +391,11 @@ export function ScheduleFormModal({
               <input
                 type="number"
                 step="any"
+                min={-90}
+                max={90}
                 inputMode="decimal"
                 aria-label="위도 (Latitude)"
+                aria-invalid={Boolean(coordError)}
                 value={latStr}
                 onChange={(e) => {
                   setLatStr(e.target.value);
@@ -370,8 +407,11 @@ export function ScheduleFormModal({
               <input
                 type="number"
                 step="any"
+                min={-180}
+                max={180}
                 inputMode="decimal"
                 aria-label="경도 (Longitude)"
+                aria-invalid={Boolean(coordError)}
                 value={lngStr}
                 onChange={(e) => {
                   setLngStr(e.target.value);
@@ -393,17 +433,25 @@ export function ScheduleFormModal({
 
           {/* Memo */}
           <div>
-            <label
-              htmlFor="schedule-memo"
-              className="block text-[12.5px] font-semibold text-[var(--color-text-main)] mb-1.5"
-            >
-              메모
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label
+                htmlFor="schedule-memo"
+                className="text-[12.5px] font-semibold text-[var(--color-text-main)]"
+              >
+                메모
+              </label>
+              <span className="text-[11px] font-medium text-[var(--color-text-muted)] tabular-nums">
+                {memo.length} / {INPUT_LIMITS.SCHEDULE_MEMO_MAX}
+              </span>
+            </div>
             <textarea
               id="schedule-memo"
               rows={2}
+              maxLength={INPUT_LIMITS.SCHEDULE_MEMO_MAX}
               value={memo}
-              onChange={(e) => setMemo(e.target.value)}
+              onChange={(e) =>
+                setMemo(e.target.value.slice(0, INPUT_LIMITS.SCHEDULE_MEMO_MAX))
+              }
               placeholder="집결 위치, 준비물, 참고사항 등을 입력해 주세요."
               className="w-full min-h-[68px] rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-app)] p-3 text-[13.5px] leading-relaxed text-[var(--color-text-main)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/15 resize-none"
             />

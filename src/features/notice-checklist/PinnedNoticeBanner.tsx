@@ -3,6 +3,11 @@ import { Megaphone, Pencil } from 'lucide-react';
 import { INITIAL_NOTICE } from '../../data/mockData';
 import type { NoticeData } from '../../types/travel';
 import { loadFromStorage, saveToStorage, STORAGE_KEYS } from '../../utils/storage';
+import {
+  INPUT_LIMITS,
+  sanitizeMultiLine,
+  sanitizeStoredNotice,
+} from '../../utils/validation';
 import { NoticeEditModal } from './NoticeEditModal';
 
 interface PinnedNoticeBannerProps {
@@ -18,7 +23,11 @@ function formatCurrentTimeLabel(): string {
 
 export function PinnedNoticeBanner({ resetKey }: PinnedNoticeBannerProps) {
   const [notice, setNotice] = useState<NoticeData>(() =>
-    loadFromStorage<NoticeData>(STORAGE_KEYS.NOTICE, INITIAL_NOTICE),
+    loadFromStorage<NoticeData>(
+      STORAGE_KEYS.NOTICE,
+      INITIAL_NOTICE,
+      sanitizeStoredNotice,
+    ),
   );
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const prevResetKeyRef = useRef<number>(resetKey);
@@ -32,8 +41,12 @@ export function PinnedNoticeBanner({ resetKey }: PinnedNoticeBannerProps) {
   }, [resetKey]);
 
   const handleSaveNotice = (nextContent: string) => {
+    const cleanContent = sanitizeMultiLine(nextContent, INPUT_LIMITS.NOTICE_MAX_LENGTH);
+    if (!cleanContent) {
+      return;
+    }
     const updatedNotice: NoticeData = {
-      content: nextContent,
+      content: cleanContent,
       updatedAt: formatCurrentTimeLabel(),
     };
     setNotice(updatedNotice);
