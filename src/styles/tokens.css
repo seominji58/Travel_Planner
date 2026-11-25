@@ -1,0 +1,52 @@
+:root {
+  /* Typography */
+  --font-sans: 'Pretendard Variable', Pretendard, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-jp: 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+
+  /* Brand & Accent (Clean Daylight Travel - Stitch Design System assets/12067909128721539429) */
+  --color-primary: #1D6FE2;
+  --color-primary-hover: #1558B8;
+  --color-primary-soft: #EBF3FE;
+
+  /* Pinned Notice Banner */
+  --color-notice-bg: #FEF3C7;
+  --color-notice-border: #FCD34D;
+  --color-notice-text: #92400E;
+  --color-notice-accent: #D97706;
+
+  /* Surfaces & Borders */
+  --color-bg-outer: #EEF2F7;
+  --color-bg-app: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-border: #E2E8F0;
+
+  /* Typography Colors */
+  --color-text-main: #0F172A;
+  --color-text-sub: #475569;
+  --color-text-muted: #94A3B8;
+
+  /* Status Colors */
+  --color-success: #10B981;
+  --color-success-soft: #ECFDF5;
+  --color-danger: #EF4444;
+  --color-danger-soft: #FEF2F2;
+  --color-upcoming: #64748B;
+  --color-upcoming-soft: #F1F5F9;
+
+  /* Schedule Category Badges */
+  --color-cat-transport: #0284C7;
+  --color-cat-transport-bg: #E0F2FE;
+  --color-cat-sightseeing: #7C3AED;
+  --color-cat-sightseeing-bg: #F3E8FF;
+  --color-cat-dining: #EA580C;
+  --color-cat-dining-bg: #FFEDD5;
+  --color-cat-hotel: #0D9488;
+  --color-cat-hotel-bg: #CCFBF1;
+
+  /* Radius & Sizing */
+  --radius-card: 16px;
+  --radius-control: 12px;
+  --radius-modal: 20px;
+  --radius-pill: 9999px;
+  --app-max-width: 430px;
+}
